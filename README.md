@@ -4,27 +4,35 @@ This repository contains Kubernetes manifests for deploying a local LLM stack wi
 
 ## Current deployed architecture
 
-The actively deployed stack is:
+The active deployment includes only:
 
-- **Ollama**: in-cluster LLM runtime and HTTP API (`ollama:11434`)
-- **OpenWebUI**: the only user-facing web interface
+- **Ollama**: in-cluster LLM runtime + HTTP API at `http://ollama:11434`
+- **OpenWebUI**: the only user-facing web UI; it calls Ollama via in-cluster DNS
 
 Runtime flow:
 
-1. User accesses OpenWebUI through ingress.
-2. OpenWebUI sends model requests directly to Ollama via in-cluster DNS (`http://ollama:11434`).
-3. Argo CD reconciles the manifests from this repo.
+1. User opens OpenWebUI through ingress.
+2. OpenWebUI sends model requests to `http://ollama:11434`.
+3. Argo CD reconciles manifests from this repo.
 
 ## Repo layout
 
-- `overlays/dev-ollama/`: deploys **only** Ollama and OpenWebUI (plus their PVCs, Service, and OpenWebUI Ingress).
-- `base/`: older manifests present in the repo but not part of the `overlays/dev-ollama` deployment path.
+- `overlays/dev-ollama/`: deploys only Ollama + OpenWebUI (PVCs, Services, and OpenWebUI Ingress).
+- `base/`: deprecated legacy manifests; not used by `overlays/dev-ollama`.
 
 ## Ingress exposure (dev)
 
-`overlays/dev-ollama/openwebui-ing.yaml` exposes only OpenWebUI using a nip.io hostname:
+Ingress exposes **only OpenWebUI** (no chatbot ingress).
 
-- `webui.172.17.93.185.nip.io`
+Use this hostname pattern:
+
+- `webui.<WSLIP>.nip.io`
+
+Get `WSLIP` in WSL:
+
+```bash
+hostname -I | awk '{print $1}'
+```
 
 ## Deploy with Argo CD
 
