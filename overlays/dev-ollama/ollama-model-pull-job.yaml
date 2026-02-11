@@ -1,0 +1,43 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ollama-model-pull
+  namespace: chatbot
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: pull-models
+        image: ollama/ollama:latest
+        env:
+        - name: OLLAMA_HOST
+          value: "http://ollama:11434"
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -eu
+          echo "Waiting for Ollama API at ${OLLAMA_HOST}..."
+          until ollama list >/dev/null 2>&1; do
+            sleep 5
+          done
+
+          while IFS= read -r model; do
+            model="$(echo "$model" | xargs)"
+            [ -z "$model" ] && continue
+            case "$model" in
+              \#*) continue ;;
+            esac
+            echo "Pulling model: $model"
+            ollama pull "$model"
+          done < /models/models.txt
+        volumeMounts:
+        - name: models
+          mountPath: /models
+          readOnly: true
+      volumes:
+      - name: models
+        configMap:
+          name: ollama-models
