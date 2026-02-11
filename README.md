@@ -73,6 +73,30 @@ kubectl apply -f application.yaml
 argocd app sync chatbot-gitops
 ```
 
+
+## Pre-pull Ollama models with a Job
+
+The dev overlay includes:
+
+- `ConfigMap/ollama-models` with a `models.txt` list of models to pull.
+- `Job/ollama-model-pull` that reads `models.txt` and runs `ollama pull` for each entry.
+
+Update the model list by editing `overlays/dev-ollama/ollama-models-configmap.yaml` and changing `data.models.txt`.
+
+Trigger the model-pull Job:
+
+```bash
+kubectl delete job ollama-model-pull -n chatbot --ignore-not-found
+kubectl apply -k overlays/dev-ollama
+kubectl logs job/ollama-model-pull -n chatbot -f
+```
+
+Check completion:
+
+```bash
+kubectl get job ollama-model-pull -n chatbot
+```
+
 ## Validate
 
 ```bash
