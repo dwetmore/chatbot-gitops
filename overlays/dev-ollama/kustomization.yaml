@@ -3,9 +3,17 @@ kind: Kustomization
 
 resources:
   - ollama.yaml
-  - ollama-models-configmap.yaml
   - ollama-model-pull-job.yaml
   - openwebui-pvc.yaml
   - openwebui-deploy.yaml
   - openwebui-svc.yaml
   - openwebui-ing.yaml
+
+configMapGenerator:
+  - name: ollama-models
+    namespace: chatbot
+    files:
+      - models.txt=models.txt
+
+generatorOptions:
+  disableNameSuffixHash: true
