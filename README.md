@@ -1,5 +1,16 @@
 # Chatbot GitOps: OpenWebUI + Ollama on MicroK8s
 
+## What it is
+A GitOps deployment repository for running the chatbot stack on Kubernetes (OpenWebUI + Ollama).
+
+## What it does
+- Stores Kubernetes manifests and overlays for chatbot infrastructure.
+- Enables declarative delivery through Argo CD.
+- Separates deploy/runtime configuration from application source code.
+
+## Why it matters
+It enforces repeatable, reviewable operations and makes chatbot environment changes auditable through Git history.
+
 This repository contains Kubernetes manifests for deploying a local LLM stack with Argo CD and Kustomize on a MicroK8s-style cluster.
 
 ## Current deployed architecture
@@ -72,7 +83,6 @@ Apply and sync:
 kubectl apply -f application.yaml
 argocd app sync chatbot-gitops
 ```
-
 
 ## Pre-pull Ollama models with a Job
 
