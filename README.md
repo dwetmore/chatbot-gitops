@@ -1,66 +1,58 @@
 # Chatbot GitOps: OpenWebUI + Ollama on MicroK8s
 
-## What it is
-A GitOps deployment repository for running the chatbot stack on Kubernetes (OpenWebUI + Ollama).
+GitOps deployment repo for the in-cluster chatbot stack managed by Argo CD.
 
-## What it does
-- Stores Kubernetes manifests and overlays for chatbot infrastructure.
-- Enables declarative delivery through Argo CD.
-- Separates deploy/runtime configuration from application source code.
+## What this repo controls
 
-## Why it matters
-It enforces repeatable, reviewable operations and makes chatbot environment changes auditable through Git history.
+- Kubernetes manifests for Ollama and Open WebUI.
+- `chatbot` namespace runtime for local LLM chat.
+- Argo CD reconciliation from `main`.
 
-This repository contains Kubernetes manifests for deploying a local LLM stack with Argo CD and Kustomize on a MicroK8s-style cluster.
+## Current architecture (as of 2026-02-22)
 
-## Current deployed architecture
+Runtime components in `chatbot` namespace:
 
-The active deployment includes only:
+- `Deployment/ollama`
+- `Deployment/openwebui`
+- `Service/ollama` (`11434/TCP`)
+- `Service/openwebui` (`80/TCP`)
+- `Ingress/openwebui` host: `webui.172.17.93.185.nip.io`
 
-- **Ollama**: in-cluster LLM runtime + HTTP API at `http://ollama:11434`
-- **OpenWebUI**: the only user-facing web UI; it calls Ollama via in-cluster DNS
+Active traffic path:
 
-Runtime flow:
+1. Browser -> `webui.172.17.93.185.nip.io`
+2. Open WebUI -> `http://finops-api.llm-finops.svc.cluster.local/proxy`
+3. FinOps proxy -> `http://ollama.chatbot.svc.cluster.local:11434`
 
-1. User opens OpenWebUI through ingress.
-2. OpenWebUI sends model requests to `http://ollama:11434`.
-3. Argo CD reconciles manifests from this repo.
+This path is required for FinOps token/cost attribution.
+
+## Important cleanup state
+
+- Duplicate Open WebUI stack in `default` namespace was removed.
+- Host collision on `webui.172.17.93.185.nip.io` resolved.
+- One-shot `ollama-model-pull` Job was removed from desired state (`kustomization.yaml`) to avoid persistent completed zombie jobs.
 
 ## Repo layout
 
-- `overlays/dev-ollama/`: deploys only Ollama + OpenWebUI (PVCs, Services, and OpenWebUI Ingress).
-- `base/`: deprecated legacy manifests; not used by `overlays/dev-ollama`.
-
-## Ingress exposure (dev)
-
-Ingress exposes **only OpenWebUI** (no chatbot ingress).
-
-Use this hostname pattern:
-
-- `webui.<WSLIP>.nip.io`
-
-Get `WSLIP` in WSL:
-
-```bash
-hostname -I | awk '{print $1}'
-```
+- `overlays/dev-ollama/`: active overlay used by Argo.
+- `base/`: legacy/deprecated; not used by active app path.
 
 ## Deploy with Argo CD
 
-Create an Argo CD `Application` pointing at the dev overlay:
+Use:
 
-- **Repo URL**: your fork/remote for this repository
-- **Path**: `overlays/dev-ollama`
-- **Destination namespace**: `chatbot`
-- **Target revision**: `main` (or your branch)
+- Repo: `https://github.com/dwetmore/chatbot-gitops.git`
+- Path: `overlays/dev-ollama`
+- Namespace: `chatbot`
+- Revision: `main`
 
-Example:
+Example `Application`:
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: chatbot-gitops
+  name: chatbot
   namespace: argocd
 spec:
   project: default
@@ -75,52 +67,55 @@ spec:
     automated:
       prune: true
       selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
 ```
 
-Apply and sync:
+## Validate deployment
 
 ```bash
-kubectl apply -f application.yaml
-argocd app sync chatbot-gitops
+microk8s kubectl get deploy,svc,ingress -n chatbot
+microk8s kubectl get pods -n chatbot
+microk8s kubectl -n chatbot get deploy openwebui -o yaml | rg 'OLLAMA_BASE_URL|value:'
 ```
 
-## Pre-pull Ollama models with a Job
+Expected `OLLAMA_BASE_URL`:
 
-The dev overlay includes:
-
-- `ConfigMap/ollama-models` with a `models.txt` list of models to pull.
-- `Job/ollama-model-pull` that reads `models.txt` and runs `ollama pull` for each entry.
-
-Update the model list by editing `overlays/dev-ollama/ollama-models-configmap.yaml` and changing `data.models.txt`.
-
-Trigger the model-pull Job:
-
-```bash
-kubectl delete job ollama-model-pull -n chatbot --ignore-not-found
-kubectl apply -k overlays/dev-ollama
-kubectl logs job/ollama-model-pull -n chatbot -f
-```
-
-Check completion:
-
-```bash
-kubectl get job ollama-model-pull -n chatbot
-```
-
-## Validate
-
-```bash
-kubectl get pods -n chatbot
-kubectl get svc -n chatbot
-kubectl get ingress -n chatbot
-kubectl describe ingress openwebui -n chatbot
-```
+- `http://finops-api.llm-finops.svc.cluster.local/proxy`
 
 ## Operations
 
 ```bash
-kubectl logs deploy/openwebui -n chatbot --tail=100 -f
-kubectl logs deploy/ollama -n chatbot --tail=100 -f
-kubectl rollout restart deploy/openwebui -n chatbot
-kubectl rollout restart deploy/ollama -n chatbot
+microk8s kubectl logs deploy/openwebui -n chatbot --tail=200 -f
+microk8s kubectl logs deploy/ollama -n chatbot --tail=200 -f
+microk8s kubectl rollout restart deploy/openwebui -n chatbot
+microk8s kubectl rollout restart deploy/ollama -n chatbot
 ```
+
+## Optional one-off model pre-pull
+
+`overlays/dev-ollama/ollama-model-pull-job.yaml` is intentionally not in `kustomization.yaml`.
+Use it only as an ad-hoc action.
+
+Run manually when needed:
+
+```bash
+microk8s kubectl -n chatbot apply -f overlays/dev-ollama/ollama-model-pull-job.yaml
+microk8s kubectl -n chatbot logs job/ollama-model-pull -f
+microk8s kubectl -n chatbot delete job ollama-model-pull
+```
+
+Edit model list in:
+
+- `overlays/dev-ollama/models.txt`
+
+## Troubleshooting
+
+If Open WebUI responds but FinOps dashboard shows no new cost:
+
+1. Confirm Open WebUI is routing to FinOps proxy (env var above).
+2. Confirm FinOps upstream points to chatbot Ollama service.
+3. Confirm pricing rules exist for emitted model/provider.
+4. Run FinOps metering for the period you are viewing.
+
+If Argo keeps reverting a manual change, commit to Git and sync; do not patch live-only.
