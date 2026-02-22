@@ -22,7 +22,7 @@ spec:
             - containerPort: 8080
           env:
             - name: OLLAMA_BASE_URL
-              value: http://ollama:11434
+              value: http://finops-api.llm-finops.svc.cluster.local/proxy
           volumeMounts:
             - name: data
               mountPath: /app/backend/data
