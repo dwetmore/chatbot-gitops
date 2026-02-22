@@ -3,7 +3,6 @@ kind: Kustomization
 
 resources:
   - ollama.yaml
-  - ollama-model-pull-job.yaml
   - openwebui-pvc.yaml
   - openwebui-deploy.yaml
   - openwebui-svc.yaml
