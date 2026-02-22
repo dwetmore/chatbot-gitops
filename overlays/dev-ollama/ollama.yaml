@@ -32,16 +32,22 @@ spec:
         env:
         - name: OLLAMA_HOST
           value: "0.0.0.0:11434"
+        - name: OLLAMA_KEEP_ALIVE
+          value: "24h"
+        - name: OLLAMA_NUM_PARALLEL
+          value: "1"
+        - name: OLLAMA_MAX_LOADED_MODELS
+          value: "2"
         volumeMounts:
         - name: ollama-data
           mountPath: /root/.ollama
         resources:
           requests:
-            cpu: 250m
-            memory: 1Gi
-          limits:
             cpu: "2"
-            memory: 6Gi
+            memory: 8Gi
+          limits:
+            cpu: "8"
+            memory: 16Gi
       volumes:
       - name: ollama-data
         persistentVolumeClaim:
